@@ -1,0 +1,59 @@
+#!/bin/bash
+
+#Globals
+retry_attempts=10
+program_name=${0##*/}
+timestamp=`date +"%Y_%m_%d-%H-%M-%S"`
+
+
+# Echo only to error stream
+function echo_error() { echo "$@" 1>&2; }
+
+# Allows a preset number of retries before a command will fail.
+# If a command does fail after the retry amount the name of the 
+# parameter is added to the failure_list file.
+function retry() {
+    local command=$1
+    local attempt=0
+    until [ $attempt -ge $retry_attempts ]
+    do
+        if [ $attempt -gt 0 ]
+        then
+            echo_error "======================================="
+            echo_error "== Command below failed, Trying again."
+            echo_error "== \"$command\""
+            echo_error "======================================="
+            sleep 17
+        fi
+        $command 2> /dev/null && break
+        attempt=$[$attempt+1]
+    done
+    if [ $attempt -ge $retry_attempts ]; then
+        echo_error "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+        echo_error "@@ Command failed all retry attempts."
+        echo_error "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+        exit 1
+    fi
+}
+
+# Pull the paramaters
+if [ "$#" -ne 2 ]; then
+    echo "Parameters needed"
+    echo ""
+    echo "$program_name <root_build_job> <parameters_file>"
+    exit 1
+else
+    root_build_job="$1"
+    parameters_file="$2"
+fi
+
+if [ "$SKIP_COMMITS_REPORT" != "true" ]; then
+    echo 'Start with the commits_in_release report as the dependency analysis is more complex.'
+    retry "python commits_in_release.py"
+    echo 'Finished the commits_in_release report.'
+    echo ''
+fi
+echo 'Now starting the dependency analysis.'
+retry "python jenkins_dependency_analysis.py $root_build_job $parameters_file"
+echo 'Finished the dependency analysis'
+echo ''
